@@ -1,4 +1,4 @@
-from one_two_tsp import OneTwoTSP
+from tsp_solver import OneTwoTSP
 from itertools import combinations
 import time
 import numpy as np
@@ -25,11 +25,9 @@ class Test:
         print()
         
         start_time = time.time()
-        berman_tour, berman_cost, christofides_cost, improved_cost = self.tsp.berman_karpinski_algorithm()
+        berman_tour, berman_cost = self.tsp.berman_karpinski_algorithm()
         end_time = time.time()
-        
-        print(f"Алгоритм Кристофидеса: {christofides_cost}")
-        print(f"После локального поиска: {improved_cost}")
+
         print(f"Алгоритм Бермана-Карпински: {berman_cost}")
         print(f"Тур: {berman_tour}")
         print(f"Время выполнения: {end_time - start_time:.4f} секунд")
@@ -41,7 +39,6 @@ class Test:
                 print(f"Коэффициент приближения: {berman_cost / optimal_cost:.4f} / {self.tsp.approx_const():.4f}")
 
         print("\nАнализ качества:")
-        print(f"Улучшение относительно Кристофидеса: {((christofides_cost - berman_cost) / christofides_cost * 100):.2f}%")
         
         edge_weights = []
         for i in range(len(berman_tour) - 1):
@@ -59,13 +56,13 @@ class Test:
 
 def test_algorithm():
     """Тестирование алгоритма на различных экземплярах"""
-    
+
     print("=== Тестирование алгоритма Бермана-Карпински для (1,2)-TSP ===\n")
-    
+
     test1 = Test("Тест 1: Случайная матрица 8X8")
     test1.set_matrix(size=8)
     test1.test()
-        
+
     test2 = Test("Тест 2: Специальный экземпляр с известной структурой")
     special_matrix = np.array([
         [0, 1, 2, 2, 2, 2, 1, 2],
@@ -98,7 +95,7 @@ def performance_analysis():
         tsp.generate_random_instance()
         
         start_time = time.time()
-        tour, cost, _, _ = tsp.berman_karpinski_algorithm()
+        tour, cost = tsp.berman_karpinski_algorithm()
         end_time = time.time()
         
         times.append(end_time - start_time)

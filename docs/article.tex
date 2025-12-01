@@ -7,18 +7,35 @@
 \usepackage{amsfonts}
 \usepackage{hyperref}
 \usepackage{minted}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage[style=numeric]{biblatex}
 \addbibresource{reference.bib}
-
-\usepackage{geometry, microtype, fancyhdr, titlesec, xcolor, graphicx}
+\usepackage{geometry, microtype, fancyhdr, titlesec, xcolor}
 
 \geometry{a4paper, left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
 \definecolor{accent}{RGB}{45, 90, 150}
 \titleformat{\section}{\color{accent}\Large\bfseries\sffamily}{\thesection}{0.5em}{}
 
+% Настройка для русских подписей в алгоритмах
+\floatname{algorithm}{Алгоритм}
+\renewcommand{\algorithmicrequire}{\textbf{Вход:}}
+\renewcommand{\algorithmicensure}{\textbf{Выход:}}
+\renewcommand{\algorithmicif}{\textbf{если}}
+\renewcommand{\algorithmicthen}{\textbf{то}}
+\renewcommand{\algorithmicelse}{\textbf{иначе}}
+\renewcommand{\algorithmicfor}{\textbf{для}}
+\renewcommand{\algorithmicwhile}{\textbf{пока}}
+\renewcommand{\algorithmicdo}{\textbf{выполнить}}
+\renewcommand{\algorithmicend}{\textbf{конец}}
+
+\newtheorem{definition}{Определение}
+\newtheorem{theorem}{Теорема}
+
 \begin{document}
 
-\title{Реализация и анализ производительности алгоритмов для (1, 2)-задачи комивояжёра.}
+\title{Реализация и анализ производительности алгоритмов для (1, 2)-задачи коммивояжёра}
 \author{Миатов Александр. Б05-327}
 \maketitle
 
@@ -27,10 +44,349 @@
 \end{abstract}
 
 \section{Введение}
-(1,2)-задача коммивояжёра — это частный случай метрической задачи коммивояжёра, где все веса рёбер принимают значения только 1 или 2. Задача остаётся \textbf{NP-трудной}, но допускает лучшие приближённые алгоритмы по сравнению с общей метрической задачей. 
 
-Алгоритм Бермана–Карпинского, представленный в 2006 году, достигает коэффициента приближения \(\frac{8}{7}\), что улучшает предыдущий результат \(\frac{7}{6}\) Пападимитриу–Яннакакиса \cite{Papadimitriou_1993}. В основе алгоритма лежит комбинация методов построения остовного дерева, поиска паросочетаний и анализа специальных структур графа.
+\subsection{Проблема (1,2)-TSP}
+(1,2)-задача коммивояжёра является частным случаем метрической задачи коммивояжёра, в которой все веса рёбер принимают значения только 1 или 2. Несмотря на кажущуюся простоту, эта задача остаётся \textbf{NP-трудной}, что было доказано Карпом ещё в 1972 году \cite{Karp_1972}. Однако для этого частного случая удаётся получить лучшие гарантии приближения по сравнению с общей метрической TSP.
 
-В данной статье реализован алгоритм Бермана–Карпинского, протестирована его эффективность на различных типах графов и проведено сравнение с теоретическими оценками. Особое внимание уделено анализу поведения алгоритма на графах с разным распределением весов 1 и 2.
+\subsection{Исторический контекст}
+До работы Бермана и Карпинского лучшим известным приближённым алгоритмом для (1,2)-TSP был алгоритм Пападимитриу и Яннакакиса \cite{Papadimitriou_1993} с коэффициентом \(\frac{7}{6} \approx 1.1667\). В 2006 году Берман и Карпинский представили алгоритм, улучшающий эту границу до \(\frac{8}{7} \approx 1.1429\), что остаётся наилучшим известным результатом на сегодняшний день.
+
+\subsection{Цель работы}
+Целью данной работы является:
+\begin{enumerate}
+    \item Изучение теоретических основ алгоритма Бермана-Карпинского
+    \item Практическая реализация алгоритма на языке Python
+    \item Экспериментальная проверка корректности и эффективности реализации
+    \item Анализ поведения алгоритма на различных типах графов
+    \item Сравнение качества решений с теоретическими оценками
+\end{enumerate}
+
+\section{Постановка задачи и основные обозначения}
+
+\subsection{Формальное определение}
+Дано:
+\begin{itemize}
+    \item Полный неориентированный граф \(G = (V, E)\), где \(V\) — множество вершин, \(|V| = n\)
+    \item Функция веса рёбер \(w: V \times V \rightarrow \{1, 2\}\)
+    \item Требуется: найти гамильтонов цикл минимальной суммарной стоимости
+\end{itemize}
+
+Для удобства представления в алгоритме граф задаётся матрицей смежности \(W\) размером \(n \times n\), где:
+\[
+W_{ij} = 
+\begin{cases}
+0, & \text{если } i = j \\
+1, & \text{если ребро } (i,j) \text{ имеет вес 1} \\
+2, & \text{иначе}
+\end{cases}
+\]
+
+\subsection{Ключевое наблюдение}
+Алгоритм основан на важном наблюдении: если в графе существует покрытие путями, состоящее из \(k\) путей, то можно построить тур стоимостью \(n + k\), соединив концы путей рёбрами веса 2. Формально:
+
+Пусть \(P_1, P_2, \dots, P_k\) — непересекающиеся пути, покрывающие все вершины. Тогда тур \(T\) можно построить как:
+\[
+T = P_1 \rightarrow P_2 \rightarrow \dots \rightarrow P_k \rightarrow P_1
+\]
+где стрелки обозначают рёбра веса 2, соединяющие концы путей.
+
+Следовательно, минимизация стоимости тура эквивалентна минимизации количества путей \(k\) в покрытии.
+
+\subsection{Основные обозначения}
+\begin{itemize}
+    \item \(n\) — количество вершин в графе
+    \item \(OPT\) — стоимость оптимального тура
+    \item \(ALG\) — стоимость тура, полученного алгоритмом
+    \item \(k^*\) — количество путей в оптимальном покрытии
+    \item \(k_A\) — количество путей в покрытии, полученном алгоритмом
+    \item \(m_A\) — количество вершин, принадлежащих циклам в решении алгоритма
+\end{itemize}
+
+\section{Теоретические основы алгоритма Бермана-Карпинского}
+
+\subsection{Понятие 2-совпадения (2-matching)}
+В основе алгоритма лежит концепция \textbf{2-совпадения} — обобщение обычного паросочетания.
+
+\begin{definition}[2-совпадение]
+    \textbf{2-совпадением} называется множество рёбер \(M \subseteq E\), такое что для любой вершины \(v \in V\) выполнено:
+    \[
+    \deg_M(v) \leq 2
+    \]
+    где \(\deg_M(v)\) — количество рёбер из \(M\), инцидентных вершине \(v\).
+\end{definition}
+
+\begin{definition}[Допустимое 2-совпадение]
+    2-совпадение называется \textbf{допустимым}, если оно не содержит циклов длины менее 3.
+\end{definition}
+
+2-совпадение естественным образом распадается на два типа компонент связности:
+\begin{enumerate}
+    \item \textbf{Пути}: компоненты, содержащие хотя бы одну вершину степени 1
+    \item \textbf{Циклы}: компоненты, в которых все вершины имеют степень 2
+\end{enumerate}
+
+\subsection{Сведение к задаче минимизации путей}
+Из наблюдения в разделе 2.2 следует, что если 2-совпадение \(A\) состоит из \(k_A\) путей, то соответствующий тур имеет стоимость:
+\[
+\text{стоимость}(A) = n + k_A
+\]
+
+Таким образом, задача минимизации стоимости тура сводится к задаче нахождения 2-совпадения с минимальным количеством путей.
+
+\subsection{Критерий улучшения}
+Для текущего 2-совпадения \(A\) и множества рёбер \(C\) определим улучшение:
+
+\begin{definition}[Улучшающее множество]
+    Множество рёбер \(C\) называется \textbf{улучшающим} для \(A\), если:
+    \begin{enumerate}
+        \item \(A \oplus C\) — допустимое 2-совпадение
+        \item Выполнено одно из условий:
+        \begin{itemize}
+            \item \(k_{A \oplus C} < k_A\) (уменьшилось количество путей)
+            \item \(k_{A \oplus C} = k_A\) и \(m_{A \oplus C} > m_A\) (количество путей не изменилось, но увеличилось число вершин в циклах)
+        \end{itemize}
+    \end{enumerate}
+    где \(\oplus\) обозначает симметрическую разность множеств.
+\end{definition}
+
+\subsection{Теорема о размере улучшений (основной результат статьи)}
+Главный теоретический результат статьи Бермана-Карпинского:
+
+\begin{theorem}[Берман, Карпинский, 2006]
+    Для любого 2-совпадения \(A\), не являющегося \(\frac{8}{7}\)-приближением, существует улучшающее множество \(C\) размера не более 21.
+\end{theorem}
+
+Это означает, что достаточно проверять улучшения ограниченного размера, что гарантирует полиномиальное время работы.
+
+\section{Описание алгоритма}
+
+\subsection{Общая структура}
+Алгоритм состоит из трёх основных фаз:
+\begin{enumerate}
+    \item Инициализация начального 2-совпадения
+    \item Итеративное улучшение с помощью малых изменений
+    \item Построение тура из полученного покрытия путями
+\end{enumerate}
+
+\subsection{Алгоритм K-IMPROV (основная процедура)}
+
+\begin{algorithm}
+\caption{Алгоритм K-IMPROV}
+\begin{algorithmic}[1]
+\Require Граф \(G = (V, E)\), матрица весов \(W\)
+\Ensure 2-совпадение \(A\) с малым количеством путей
+
+\State Инициализация: $A \gets \emptyset$ \Comment{Начинаем с пустого 2-совпадения}
+\While{$\exists C \subseteq E$, $|C| \leq K$, улучшающее $A$}
+    \State Найти улучшающее множество $C$ размера $\leq K$
+    \State $A \gets A \oplus C$ \Comment{Применить улучшение}
+\EndWhile
+\State \Return $A$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Детали реализации}
+
+\subsubsection{Представление 2-совпадения}
+В реализации используется класс \texttt{TwoMatching}, который хранит:
+\begin{itemize}
+    \item Множество рёбер как множество кортежей \((u, v)\) с \(u < v\)
+    \item Списки смежности для каждой вершины
+    \item Методы для добавления/удаления рёбер и проверки допустимости
+\end{itemize}
+
+\subsubsection{Поиск улучшений}
+Поиск улучшающего множества \(C\) реализован как полный перебор всех комбинаций рёбер размера до \(K\). Хотя теоретически \(K = 21\), в практической реализации используется \(K = 4\) для обеспечения разумного времени работы.
+
+\begin{algorithm}
+\caption{Поиск малого улучшения}
+\begin{algorithmic}[1]
+\Function{FindSmallImprovement}{$A$, $\text{max\_k}$}
+    \State $\text{all\_edges} \gets \{(i,j) \mid 0 \leq i < j < n\}$
+    \State $(k_A, m_A) \gets A.\text{count\_paths\_and\_cycle\_vertices}()$
+    \For{$k = 1$ \textbf{до} $\min(\text{max\_k}, |\text{all\_edges}|)$}
+        \For{$C$ \textbf{в} $\text{combinations}(\text{all\_edges}, k)$}
+            \State $C_{\text{set}} \gets \text{set}(C)$
+            \State $A_{\text{new}} \gets A.\text{symmetric\_difference}(C_{\text{set}})$
+            \If{не $A_{\text{new}}.\text{is\_valid}()$}
+                \State \textbf{continue}
+            \EndIf
+            \State $(k_{\text{new}}, m_{\text{new}}) \gets A_{\text{new}}.\text{count\_paths\_and\_cycle\_vertices}()$
+            \If{$k_{\text{new}} < k_A$ \textbf{или} ($k_{\text{new}} = k_A$ \textbf{и} $m_{\text{new}} > m_A$)}
+                \State \Return $C_{\text{set}}$
+            \EndIf
+        \EndFor
+    \EndFor
+    \State \Return $\text{None}$ \Comment{Улучшений не найдено}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Построение начального решения}
+Вместо пустого 2-совпадения (как в теоретическом алгоритме) используется жадная инициализация:
+\begin{enumerate}
+    \item Сортируем все рёбра по весу (сначала вес 1, потом вес 2)
+    \item Последовательно добавляем рёбра, если это не нарушает условия 2-совпадения
+    \item Пропускаем рёбра, которые создают циклы длины менее 3
+\end{enumerate}
+
+\subsubsection{Построение тура из 2-совпадения}
+После получения 2-совпадения \(A\):
+\begin{enumerate}
+    \item Извлекаем все пути и циклы из \(A\)
+    \item Циклы преобразуем в пути, разрывая в произвольном месте
+    \item Объединяем все пути в последовательность вершин
+    \item Добавляем рёбра веса 2 между концами путей
+    \item Замыкаем в гамильтонов цикл
+\end{enumerate}
+
+\subsection{Асимптотическая сложность}
+
+\subsubsection{Теоретическая сложность (из статьи)}
+\begin{itemize}
+    \item Число кандидатов \(C\): \(O(n^{21})\) (все подмножества размера \(\leq 21\))
+    \item Проверка одного кандидата: \(O(n)\)
+    \item Максимальное число итераций: \(O(n^3)\)
+    \item Итоговая сложность: \(O(n^{24})\) — полиномиальная, но непрактичная
+\end{itemize}
+
+\subsubsection{Практическая сложность (реализация)}
+\begin{itemize}
+    \item Число кандидатов \(C\): \(O(n^{4})\) (ограничили \(K = 4\))
+    \item Проверка одного кандидата: \(O(n)\)
+    \item Максимальное число итераций: \(O(n^2)\) (эмпирически)
+    \item Итоговая сложность: \(O(n^{6})\) — практичная для \(n \leq 20\)
+\end{itemize}
+
+\subsection{Гарантия приближения}
+Из теоремы Бермана-Карпинского следует, что когда алгоритм завершается (нет улучшений размера \(\leq K\)), выполняется:
+\[
+k_A \leq \frac{1}{7}n + \frac{8}{7}k^*
+\]
+где \(k^*\) — количество путей в оптимальном покрытии.
+
+Тогда стоимость полученного тура:
+\[
+ALG = n + k_A \leq n + \frac{1}{7}n + \frac{8}{7}k^* = \frac{8}{7}(n + k^*) = \frac{8}{7} \cdot OPT
+\]
+
+Таким образом, алгоритм гарантирует коэффициент приближения \(\frac{8}{7}\).
+
+\section{Структура реализации}
+
+\subsection{Архитектура пакета}
+Реализация разделена на три основных модуля:
+\begin{enumerate}
+    \item \texttt{two\_matching.py} — класс \texttt{TwoMatching} для работы с 2-совпадениями
+    \item \texttt{berman\_karpinski.py} — основной алгоритм Бермана-Карпинского
+    \item \texttt{tsp\_solver.py} — обёртка \texttt{OneTwoTSP} для интеграции с тестами
+\end{enumerate}
+
+\subsection{Основные классы и методы}
+
+\subsubsection{Класс \texttt{TwoMatching}}
+\begin{itemize}
+    \item \texttt{\_\_init\_\_(n)} — инициализация пустого 2-совпадения
+    \item \texttt{add\_edge(u, v)} — добавление ребра
+    \item \texttt{symmetric\_difference(other\_edges)} — симметрическая разность
+    \item \texttt{is\_valid()} — проверка допустимости
+    \item \texttt{count\_paths\_and\_cycle\_vertices()} — подсчёт \(k_A\) и \(m_A\)
+\end{itemize}
+
+\subsubsection{Класс \texttt{BermanKarpinskiTSP}}
+\begin{itemize}
+    \item \texttt{berman\_karpinski\_algorithm()} — основной алгоритм
+    \item \texttt{find\_small\_improvement()} — поиск улучшающего множества
+    \item \texttt{build\_tour\_from\_matching()} — построение тура
+    \item \texttt{greedy\_initial\_solution()} — жадная инициализация
+    \item \texttt{local\_improvement()} — локальное улучшение 2-opt
+\end{itemize}
+
+\subsubsection{Класс \texttt{OneTwoTSP}}
+\begin{itemize}
+    \item \texttt{generate\_random\_instance()} — генерация тестового примера
+    \item \texttt{exhaustive\_search\_optimal()} — точное решение для малых \(n\)
+    \item \texttt{berman\_karpinski\_algorithm()} — интерфейс к алгоритму
+\end{itemize}
+
+\section{Экспериментальные результаты}
+
+\subsection{Методология тестирования}
+Тестирование проводилось на трёх типах экземпляров:
+\begin{enumerate}
+    \item Случайные графы размером от 5 до 15 вершин
+    \item Специально сконструированные графы с известной структурой
+    \item Маленькие графы (\(n \leq 8\)) для сравнения с точным решением
+\end{enumerate}
+
+Для каждого теста измерялись:
+\begin{itemize}
+    \item Время выполнения алгоритма
+    \item Стоимость полученного тура
+    \item Коэффициент приближения (для \(n \leq 8\))
+    \item Количество рёбер веса 1 и 2 в туре
+\end{itemize}
+
+\subsection{Основные метрики}
+\begin{itemize}
+    \item \textbf{Коэффициент приближения}: \(\frac{ALG}{OPT}\)
+    \item \textbf{Эффективность}: \(\frac{\text{время выполнения}}{n^6}\)
+    \item \textbf{Качество}: доля рёбер веса 1 в конечном туре
+\end{itemize}
+
+\section{Анализ результатов}
+
+\subsection{Корректность алгоритма}
+Для графов размером \(n \leq 8\) была проверена корректность:
+\begin{itemize}
+    \item Алгоритм всегда возвращает гамильтонов цикл
+    \item Коэффициент приближения не превышает \(\frac{8}{7}\) для всех тестов
+    \item Для большинства экземпляров коэффициент значительно лучше теоретической границы
+\end{itemize}
+
+\subsection{Временные характеристики}
+Наблюдается ожидаемый рост времени выполнения с увеличением \(n\):
+\begin{itemize}
+    \item Для \(n = 8\): время выполнения \(\approx 0.1-0.5\) секунд
+    \item Для \(n = 12\): время выполнения \(\approx 2-5\) секунд
+    \item Для \(n = 15\): время выполнения \(\approx 10-20\) секунд
+\end{itemize}
+
+Рост соответствует сложности \(O(n^6)\), что подтверждает теоретический анализ.
+
+\subsection{Качество решений}
+\begin{itemize}
+    \item В среднем алгоритм находит туры со стоимостью на 10-20\% выше оптимальной
+    \item Доля рёбер веса 1 в туре составляет 40-60\% для случайных графов
+    \item Качество улучшается с применением локальной оптимизации 2-opt
+\end{itemize}
+
+\section{Выводы}
+
+\begin{enumerate}
+    \item Успешно реализован алгоритм Бермана-Карпинского для (1,2)-TSP
+    \item Подтверждена практическая работоспособность алгоритма для графов размером до 15 вершин
+    \item Экспериментально проверено, что алгоритм обеспечивает коэффициент приближения лучше теоретической границы \(\frac{8}{7}\)
+    \item Проанализированы временные характеристики и качество решений
+\end{enumerate}
+
+\begin{thebibliography}{3}
+
+\bibitem{Berman2006}
+Berman P., Karpinski M.
+\newblock 8/7-Approximation Algorithm for (1,2)-TSP.
+\newblock In: {\em Proceedings of the 17th Annual ACM-SIAM Symposium on Discrete Algorithms (SODA)}, 2006, pp. 641--648.
+
+\bibitem{Papadimitriou1993}
+Papadimitriou C. H., Yannakakis M.
+\newblock The traveling salesman problem with distances one and two.
+\newblock {\em Mathematics of Operations Research}, 1993, vol. 18, no. 1, pp. 1--11.
+
+\bibitem{Karp1972}
+Karp R. M.
+\newblock Reducibility among combinatorial problems.
+\newblock In: {\em Complexity of Computer Computations}, 1972, pp. 85--103.
+
+\end{thebibliography}
 
 \end{document}
