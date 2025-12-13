@@ -47,10 +47,10 @@ class OneTwoTSP:
     
     def exhaustive_search_optimal(self):
         if self.n > 8:
-            return None, float('inf')
+            return None, np.inf
         
         best_tour = None
-        best_cost = float('inf')
+        best_cost = np.inf
         
         for perm in itertools.permutations(range(1, self.n)):
             tour = [0] + list(perm) + [0]
